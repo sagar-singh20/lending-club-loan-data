@@ -18,9 +18,7 @@ In the course of this project, public data made available by LendingClub, world�
 	
 These 3 steps provide an opportunity to integrate data-driven algorithms in order to aid the business process and reduce effort and time. Given this understanding of the business and the dataset, the following approach was decided for the course of analysis -
 
-	●  Conduct exploratory analysis to draw conclusions based on region-wise loan targets and
- understand loan term distribution to help LendingClub understand specific markets for expansion
- and also design schemes with flexible interest rates and longer terms to attract young borrowers.
+	●  Conduct exploratory analysis to draw conclusions based on region-wise loan targets and understand loan term distribution to help LendingClub understand specific markets for expansion and also design schemes with flexible interest rates and longer terms to attract young borrowers.
  
 	● Explore regression techniques to identify most suited borrower characteristics driving interest rates at which a loan might be offered for a particular borrower and attempt grade classification to aid in quick loan applicant rating.
 	
