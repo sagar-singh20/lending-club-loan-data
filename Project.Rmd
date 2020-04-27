@@ -22,6 +22,8 @@ library(glmnet)
 library(pls)
 library(caret)
 library(nnet)
+library(tree)
+library(gridExtra)
 ```
 
 # Data Gathering
@@ -49,6 +51,14 @@ loan_data_filtered <- drop_na(loan_data_filtered)
 summary(loan_data_filtered)
 ```
 
+```{r}
+a <- loan_data_filtered %>% select(home_ownership, annual_inc, dti, revol_util)
+plot1 <- ggplot(a) + geom_histogram(aes(annual_inc), bins = 30, color = 'red') + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+plot2 <- ggplot(a) + geom_bar(aes(home_ownership)) + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+plot3 <- ggplot(a) + geom_histogram(aes(dti), bins = 30) + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+plot4 <- ggplot(a) + geom_histogram(aes(revol_util), bins = 30) + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+grid.arrange(plot1, plot2, plot3, plot4, ncol=2)
+```
 # Data Transformation
 
 ```{r}
@@ -194,12 +204,23 @@ regfit.fwd.v2 = regsubsets(int_rate ~ ., data = temp, really.big = TRUE, method 
 ```
 
 ```{r}
+plot(regfit.fwd.summary$adjr2 ,xlab="Number of Variables ", ylab="Adjusted RSq",type="l", col='red')
+lines(regfit.fwd.v2.summary$adjr2 ,xlab="Number of Variables ", ylab="Adjusted RSq",type="l", col = 'green')
+legend("bottomright", legend=c("With Grades", "Without Grades"),col=c("red", "green"), lty=1:2, cex=0.8)
+title('Forward selection with and without grades')
+```
+
+```{r}
 regfit.fwd.v2.summary <- summary(regfit.fwd.v2)
 par(mfrow=c(2, 2))
 plot(regfit.fwd.v2.summary$rss ,xlab="Number of Variables ",ylab="RSS",type="l") 
-plot(regfit.fwd.v2.summary$adjr2 ,xlab="Number of Variables ", ylab="Adjusted RSq",type="l")
+
 plot(regfit.fwd.v2.summary$cp ,xlab="Number of Variables ",ylab="Cp", type='l')
 plot(regfit.fwd.v2.summary$bic ,xlab="Number of Variables ",ylab="BIC",type='l')
+```
+
+```{r}
+
 ```
 
 ```{r}
@@ -218,19 +239,30 @@ plot(regfit.fwd.v2,scale="bic")
 ```{r}
 y <- loan_data_filtered$int_rate
 x <- loan_data_filtered %>% select(-int_rate) %>% data.matrix()
-lambdas <- 10^seq(3, -2, by = -.1)
-cv_fit <- cv.glmnet(x, y, alpha = 0, lambda = lambdas)
-plot(cv_fit)
+lambda_seq <- 10^seq(2, -2, by = -.1)
+
+# Splitting the data into test and train
+set.seed(7)
+train = sample(1:nrow(x), nrow(x)/2)
+x_test = (-train)
+y_test = y[-train]
+
+cv_output <- cv.glmnet(x[train,], y[train], alpha = 1, lambda = lambda_seq)
+
+# identifying best lamda
+best_lam <- cv_output$lambda.min
+
+#lambdas <- 10^seq(3, -2, by = -.1)
+#cv_fit <- cv.glmnet(x, y, alpha = 0, lambda = lambdas)
+#plot(cv_fit)
 ```
 
 ```{r}
-opt_lambda <- cv_fit$lambda.min
-fit <- cv_fit$glmnet.fit
-y_predicted <- predict(fit, s = opt_lambda, newx = x)
+lasso_best <- glmnet(x[train,], y[train], alpha = 1, lambda = best_lam)
+```
 
-# Sum of Squares Total and Error
-sst <- sum((y - mean(y))^2)
-sse <- sum((y_predicted - y)^2)
+```{r}
+coef(lasso_best)
 ```
 
 ## Principal Component Regression
@@ -241,8 +273,9 @@ pcr.fit=pcr(int_rate ~ ., data=loan_data_filtered , scale=TRUE , validation ="CV
 ```
 
 ```{r}
-summary(pcr.fit)
-validationplot(pcr.fit, val.type="MSEP")
+b <- pcr.fit
+#summary(pcr.fit)
+validationplot(b, val.type="MSEP")
 ```
 
 ```{r}
@@ -251,19 +284,28 @@ pcr.temp.fit=pcr(int_rate ~ ., data=temp , scale=TRUE , validation ="CV")
 ```
 
 ```{r}
-summary(pcr.temp.fit)
-validationplot(pcr.temp.fit, val.type="MSEP")
+#summary(pcr.temp.fit)
+plot1 <- validationplot(pcr.temp.fit, val.type="MSEP")
+plot2 <- validationplot(b, val.type="MSEP")
+grid.arrange(plot1, plot2, ncol = 2)
 ```
 
 ## Partial Least Squares
 
 ```{r}
+pls.fit=plsr(int_rate ~ ., data=loan_data_filtered , scale=TRUE , validation ="CV")
+pls.temp.fit=pcr(int_rate ~ ., data=temp , scale=TRUE , validation ="CV")
+```
+
+```{r}
+validationplot(pls.fit, val.type="R2")
+validationplot(pls.temp.fit, val.type="R2")
 ```
 
 ## Logistic Regression
 
 ```{r}
-new_temp <- loan_data_filtered %>% select(-sub_grade)
+new_temp <- loan_data_filtered %>% select(-c(sub_grade, int_rate, years))
 table(new_temp$grade)
 ```
 
@@ -293,6 +335,14 @@ set.seed(234)
 data <- downSample(x = x, y = new_temp$grade)
 ```
 
+## Sampling
+
+```{r}
+new_temp <- sample_n(new_temp, 78000)
+table(new_temp$grade)
+data <- new_temp %>% mutate(Class = grade) %>% select(-grade)
+```
+
 ```{r}
 table(data$Class)
 ```
@@ -314,12 +364,20 @@ predicted_class <- predict(glm.fits, test_data)
 ```
 
 ```{r}
-table(predicted_class, test_data$Class)
+write.csv(table(predicted_class, test_data$Class))
 ```
 
+
+## Decision Tree
+
+```{r}
+tree.fit = tree(Class ~ ., train_data)
+summary(tree.fit)
+```
 
 ## Random Forest
 
 ```{r}
-
+tree.fit = tree(Class ~ ., train_data)
+summary(tree.fit)
 ```
